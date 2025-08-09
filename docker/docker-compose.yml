@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Agent Factory API
+  api:
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/agent_factory
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=your-production-secret-key
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ../logs:/app/logs
+    restart: unless-stopped
+
+  # Agent Factory UI
+  ui:
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ["streamlit", "run", "src/agent_factory/ui/main.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=agent_factory
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - api
+      - ui
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # Agent Factory API (Development)
+  api:
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ["uvicorn", "agent_factory.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/agent_factory_dev
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=dev-secret-key
+      - DEBUG=true
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ../src:/app/src
+      - ../logs:/app/logs
+    restart: unless-stopped
+
+  # Agent Factory UI (Development)
+  ui:
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ["streamlit", "run", "src/agent_factory/ui/main.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.fileWatcherType=poll"]
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://localhost:8000
+      - STREAMLIT_SERVER_ENABLE_CORS=true
+    depends_on:
+      - api
+    volumes:
+      - ../src:/app/src
+    restart: unless-stopped
+
+  # PostgreSQL Database (Development)
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=agent_factory_dev
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  # Redis Cache (Development)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    restart: unless-stopped
+
+  # Development Tools
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@agentfactory.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
